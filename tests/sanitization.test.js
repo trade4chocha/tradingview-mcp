@@ -113,8 +113,8 @@ describe('requireFinite() — numeric validation', () => {
     assert.throws(() => requireFinite('abc', 'value'), /value must be a finite number/);
   });
 
-  it('coerces null to 0', () => {
-    assert.equal(requireFinite(null, 'x'), 0);
+  it('rejects null', () => {
+    assert.throws(() => requireFinite(null, 'x'), /x must be a finite number/);
   });
 
   it('rejects undefined', () => {
@@ -299,7 +299,7 @@ describe('source audit — no unsafe interpolation patterns', () => {
   }
 
   const VULNERABLE_PATTERNS = [
-    /evaluate\([^)]*'\$\{(?!CHART_API|CWC|rp|apiPath|colPath|CHART_COLLECTION)/,
+    /evaluate\(`[\s\S]*?'\$\{(?!CHART_API|CWC|rp|apiPath|colPath|CHART_COLLECTION)/,
   ];
 
   for (const file of coreFiles) {

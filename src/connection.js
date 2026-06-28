@@ -42,6 +42,7 @@ export function safeString(str) {
  * Prevents corrupt values from reaching TradingView APIs that persist to cloud state.
  */
 export function requireFinite(value, name) {
+  if (value == null) throw new Error(`${name} must be a finite number, got: ${value}`);
   const n = Number(value);
   if (!Number.isFinite(n)) throw new Error(`${name} must be a finite number, got: ${value}`);
   return n;

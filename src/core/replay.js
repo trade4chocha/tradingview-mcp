@@ -18,37 +18,41 @@ function _resolve(deps) {
 
 export async function start({ date, _deps } = {}) {
   const { evaluate, getReplayApi } = _resolve(_deps);
+
+  // Validate date before any CDP side-effects so an invalid date can't leave
+  // the replay toolbar open with no cleanup path.
+  let ts;
+  if (date) {
+    ts = new Date(date).getTime();
+    if (isNaN(ts)) throw new Error(`Invalid date: "${date}". Use YYYY-MM-DD format.`);
+  }
+
   const rp = await getReplayApi();
   const available = await evaluate(wv(`${rp}.isReplayAvailable()`));
   if (!available) throw new Error('Replay is not available for the current symbol/timeframe');
 
   await evaluate(`${rp}.showReplayToolbar()`);
 
-  // selectDate() is async — it calls enableReplayMode() then _onPointSelected()
-  // which initializes the server-side replay session. Must be awaited inside the
-  // page context, otherwise the promise is fire-and-forget and replay state says
-  // "started" but stepping doesn't work (issue #26).
+  // selectDate() returns a Promise. awaitPromise:true makes CDP block until it
+  // resolves, so the session is fully initialized before we start polling (issue #26).
   if (date) {
-    const ts = new Date(date).getTime();
-    if (isNaN(ts)) throw new Error(`Invalid date: "${date}". Use YYYY-MM-DD format.`);
-    await evaluate(`${rp}.selectDate(${ts}).then(function() { return 'ok'; })`);
+    await evaluate(`${rp}.selectDate(${ts}).then(function() { return 'ok'; })`, { awaitPromise: true });
   } else {
     await evaluate(`${rp}.selectFirstAvailableDate()`);
   }
 
   // Poll until replay is fully initialized: isReplayStarted AND currentDate is set.
-  // selectDate()'s promise resolves before the data series is ready, so we need
-  // to wait for currentDate to become non-null before stepping will work.
+  // selectDate()'s promise resolving does not guarantee the data series is ready.
   let started = false;
   let currentDate = null;
   for (let i = 0; i < 30; i++) {
     started = await evaluate(wv(`${rp}.isReplayStarted()`));
     currentDate = await evaluate(wv(`${rp}.currentDate()`));
-    if (started && currentDate !== null) break;
+    if (started && currentDate != null) break;
     await new Promise(r => setTimeout(r, 250));
   }
 
-  if (!started) {
+  if (!started || currentDate == null) {
     try { await evaluate(`${rp}.stopReplay()`); } catch {}
     throw new Error('Replay failed to start. The selected date may not have data for this timeframe. Try a more recent date or a higher timeframe (e.g., Daily).');
   }
